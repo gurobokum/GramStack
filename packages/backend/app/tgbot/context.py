@@ -18,3 +18,4 @@ class Context(
 
     db_session: AsyncSession | None = None
     tg_user: TGUser | None = None
+    page: str | None = None

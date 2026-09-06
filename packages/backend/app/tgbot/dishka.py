@@ -17,6 +17,7 @@ from app.posthog import PostHogEvent, posthog
 from app.tgbot.admin.i18n import TGBotAdminI18NProvider
 from app.tgbot.context import Context
 from app.tgbot.i18n import TGBotI18NProvider
+from app.tgbot.routing import Page
 from app.tgbot.utils import extract_user_data
 
 
@@ -54,6 +55,12 @@ class TGBotRootProvider(Provider):
             raise AppError("Message is not accessible")
 
         return cast(Message, message)
+
+    @provide(scope=Scope.REQUEST)
+    def get_page(self, context: Context) -> Page:
+        if context.page is None:
+            raise AppError("Page is None")
+        return Page(context.page)
 
     @provide(scope=Scope.REQUEST)
     async def signin_user(self, update: Update, db_session: AsyncSession) -> TGUser:

@@ -17,6 +17,7 @@ from app.tgbot.app import TGApp, tg_app
 from app.tgbot.context import Context
 from app.tgbot.handlers import handlers, signin_middleware
 from app.tgbot.i18n import TEXTS
+from app.tgbot.routing import add_handlers
 from app.tgbot.utils import extract_user_data, get_texts
 from app.worker.conf import WorkerSettings
 
@@ -51,9 +52,10 @@ async def error_handler(update: object, context: Context) -> None:
 
 @asynccontextmanager
 async def start_tg_app(session_maker: AsyncSessionMaker) -> AsyncGenerator[TGApp]:
+    # The middleware stays outside add_handlers: page tracking there would
+    # consume the stored page before the group-0 handler sees it.
     tg_app.add_handler(TypeHandler(Update, signin_middleware), group=-1)
-    tg_app.add_handlers(handlers)
-    tg_app.add_handlers(credits_handlers)
+    add_handlers(tg_app, handlers, credits_handlers)
     tg_app.add_error_handler(error_handler)
 
     if settings.TGBOT_SETUP_COMMANDS:
