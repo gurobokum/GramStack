@@ -6,6 +6,7 @@ from typing import Any, Protocol, TypedDict
 
 import structlog
 from arq.connections import RedisSettings
+from arq.cron import CronJob, cron
 from arq.worker import Function, func
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -43,6 +44,7 @@ class JobContext(BaseModel):
 
 class WorkerSettings:
     functions: list[Function] = []
+    cron_jobs: list[CronJob] = []
     queue_name: str = "gramstack:queue"
     job_timeout = 60 * 60
 
@@ -50,7 +52,11 @@ class WorkerSettings:
 
     @staticmethod
     async def on_startup(ctx: WorkerContext) -> None:
-        logger.info("Worker startup")
+        logger.info(
+            "Worker startup",
+            tasks=sorted(f.name for f in WorkerSettings.functions),
+            crons=sorted(c.name for c in WorkerSettings.cron_jobs if c.name),
+        )
         engine = ctx["engine"] = create_async_engine(settings.DATABASE_URL, "worker")
         ctx["db_session_maker"] = create_session_maker(engine)
 
@@ -72,21 +78,40 @@ def task[**P](
     def decorator(
         f: Task[P],
     ) -> Task[P]:
-        @functools.wraps(f)
-        async def _func(ctx: dict[Any, Any], *args: P.args, **kwargs: P.kwargs) -> Any:
-            db_session_maker = ctx["db_session_maker"]
-            if not db_session_maker:
-                raise ValueError("Database session maker is None")
-
-            async with db_session_maker() as db_session:
-                job_context = JobContext.model_validate(
-                    {**ctx, "db_session": db_session}
-                )
-                return await f(job_context, *args, **kwargs)
-
-        job = func(_func, name=name)
-        WorkerSettings.functions.append(job)
-
+        WorkerSettings.functions.append(func(_with_job_context(f), name=name))
         return f
 
     return decorator
+
+
+def cron_task[**P](
+    name: str,
+    **cron_kwargs: Any,
+) -> Callable[[Task[P]], Task[P]]:
+    """
+    Register a task arq runs on a schedule, e.g. cron_task("name", minute={0, 30}).
+    """
+
+    def decorator(
+        f: Task[P],
+    ) -> Task[P]:
+        WorkerSettings.cron_jobs.append(
+            cron(_with_job_context(f), name=name, **cron_kwargs)
+        )
+        return f
+
+    return decorator
+
+
+def _with_job_context[**P](f: Task[P]) -> Callable[..., Any]:
+    @functools.wraps(f)
+    async def _func(ctx: dict[Any, Any], *args: P.args, **kwargs: P.kwargs) -> Any:
+        db_session_maker = ctx["db_session_maker"]
+        if not db_session_maker:
+            raise ValueError("Database session maker is None")
+
+        async with db_session_maker() as db_session:
+            job_context = JobContext.model_validate({**ctx, "db_session": db_session})
+            return await f(job_context, *args, **kwargs)
+
+    return _func
