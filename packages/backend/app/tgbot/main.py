@@ -9,8 +9,10 @@ from telegram.ext import ApplicationHandlerStop, TypeHandler
 
 from app.conf import settings
 from app.core.errors import ForbiddenError, UserIsBannedError
+from app.credits.errors import InsufficientCreditsError
 from app.credits.handlers import handlers as credits_handlers
 from app.db import AsyncSessionMaker
+from app.posthog import PostHogEvent, posthog
 from app.tgbot.app import TGApp, tg_app
 from app.tgbot.context import Context
 from app.tgbot.handlers import handlers, signin_middleware
@@ -36,6 +38,9 @@ async def error_handler(update: object, context: Context) -> None:
         if chat:
             await chat.send_message(text=texts.error_handler.banned_text)
         raise ApplicationHandlerStop
+
+    if isinstance(error, InsufficientCreditsError) and user_data:
+        posthog.capture(user_data.tg_id, PostHogEvent.NO_CREDITS)
 
     # Show welcome message to user if he is not authorized
     if isinstance(error, ForbiddenError) and chat:

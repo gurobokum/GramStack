@@ -41,10 +41,16 @@ async def start(
                 text=texts.start.welcome_text,
             )
             return
+        posthog.capture(
+            user.tg_id,
+            PostHogEvent.SIGNED_UP,
+            {"$set": {"username": user.username}},
+        )
         text = texts.start.welcome_text
     else:
         text = texts.start.welcome_back_text
 
+    posthog.capture(user.tg_id, PostHogEvent.STARTED)
     await chat.send_message(
         text=text,
         reply_markup=keyboard(

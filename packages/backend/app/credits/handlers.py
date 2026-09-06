@@ -10,6 +10,7 @@ from app.core.errors import AppError, NotFoundError
 from app.credits.i18n import HandlersTexts as CreditsHandlersTexts
 from app.credits.models import CreditsPurchaseStatus
 from app.credits.services import CreditsPurchaseService
+from app.posthog import PostHogEvent, posthog
 from app.tgbot.context import Context
 from app.tgbot.dishka import inject
 
@@ -79,6 +80,14 @@ async def complete_payment(
         purchase.id,
         successful_payment.provider_payment_charge_id,
         successful_payment.telegram_payment_charge_id,
+    )
+    posthog.capture(
+        user.tg_id,
+        PostHogEvent.PURCHASED_CREDITS,
+        {
+            "credits_amount": purchase.credits_amount,
+            "package_name": purchase.package_name,
+        },
     )
 
 

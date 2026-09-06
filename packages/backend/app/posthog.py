@@ -10,6 +10,10 @@ logger = structlog.get_logger()
 
 
 class PostHogEvent(str, enum.Enum):
+    SIGNED_UP = "user_signed_up"
+    STARTED = "user_started"
+    PURCHASED_CREDITS = "user_purchased_credits"
+    NO_CREDITS = "user_no_credits"
     USER_BLOCKED_BOT = "user_blocked_bot"
     USER_UNBLOCKED_BOT = "user_unblocked_bot"
 
