@@ -1,12 +1,12 @@
 import secrets
-from typing import Any
+from typing import Any, Literal, overload
 
 from sqlalchemy import sql
 
 from app.auth.errors import InvalidInviteCodeError
 from app.auth.models import TGInviteCode, TGUser
 from app.conf import settings
-from app.core.errors import AppError
+from app.core.errors import AppError, NotFoundError
 from app.core.services import BaseService
 from app.models.base import utc_now
 from app.tgbot.schemas import UserTGData
@@ -38,12 +38,24 @@ class TGUserService(BaseService):
             )
         return result.scalar_one()
 
-    async def get_user(self, tg_user_id: int) -> TGUser | None:
+    @overload
+    async def get_user(self, tg_user_id: int, *, required: Literal[True]) -> TGUser: ...
+
+    @overload
+    async def get_user(
+        self, tg_user_id: int, *, required: Literal[False] = False
+    ) -> TGUser | None: ...
+
+    async def get_user(
+        self, tg_user_id: int, *, required: bool = False
+    ) -> TGUser | None:
         async with self.tx():
             result = await self.db_session.execute(
                 sql.select(TGUser).filter_by(tg_id=tg_user_id)
             )
             tg_user = result.scalar_one_or_none()
+        if required and tg_user is None:
+            raise NotFoundError(f"User is not found: '{tg_user_id}'")
         return tg_user
 
     async def get_user_and_update(
