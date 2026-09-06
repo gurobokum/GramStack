@@ -1,10 +1,11 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from app.auth.errors import CreditsLockExpiredError, InsufficientCreditsError
 from app.auth.models import TGUser
 from app.auth.services import TGUserService
+from app.credits.services import spend_credits
 from app.db import AsyncSessionMaker
 from app.tgbot.schemas import UserTGData
 
@@ -110,3 +111,53 @@ async def test_confirm_already_confirmed_lock_raises_expired(
         await user_svc.confirm_locked_credits(TG_USER_ID, lock_tx_id)
         with pytest.raises(CreditsLockExpiredError):
             await user_svc.confirm_locked_credits(TG_USER_ID, lock_tx_id)
+
+
+async def test_spend_credits_confirms_on_success(
+    db_session_maker: AsyncSessionMaker,
+) -> None:
+    await create_user(db_session_maker, credits=10)
+
+    async with db_session_maker() as session:
+        async with spend_credits(session, TG_USER_ID, 3) as lock_tx_id:
+            assert isinstance(lock_tx_id, UUID)
+
+    assert await get_balance(db_session_maker) == 7
+
+
+async def test_spend_credits_refunds_on_error(
+    db_session_maker: AsyncSessionMaker,
+) -> None:
+    await create_user(db_session_maker, credits=10)
+
+    async with db_session_maker() as session:
+        with pytest.raises(RuntimeError):
+            async with spend_credits(session, TG_USER_ID, 3):
+                raise RuntimeError
+
+    assert await get_balance(db_session_maker) == 10
+
+
+async def test_spend_credits_reuses_existing_lock(
+    db_session_maker: AsyncSessionMaker,
+) -> None:
+    await create_user(db_session_maker, credits=10)
+
+    async with db_session_maker() as session:
+        user_svc = TGUserService(session)
+        lock_tx_id = await user_svc.lock_credits(TG_USER_ID, 3)
+        async with spend_credits(session, TG_USER_ID, lock_tx_id=lock_tx_id) as yielded:
+            assert yielded == lock_tx_id
+
+    assert await get_balance(db_session_maker) == 7
+
+
+async def test_spend_credits_requires_amount_or_lock(
+    db_session_maker: AsyncSessionMaker,
+) -> None:
+    await create_user(db_session_maker, credits=10)
+
+    async with db_session_maker() as session:
+        with pytest.raises(ValueError):
+            async with spend_credits(session, TG_USER_ID):
+                pass

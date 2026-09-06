@@ -18,12 +18,19 @@ from app.credits.schemas import CreditsPackage
 
 @asynccontextmanager
 async def spend_credits(
-    db_session: AsyncSession, tg_user_id: int, amount: int
-) -> AsyncGenerator[None]:
+    db_session: AsyncSession,
+    tg_user_id: int,
+    amount: int | None = None,
+    *,
+    lock_tx_id: UUID | None = None,
+) -> AsyncGenerator[UUID]:
     tg_user_svc = TGUserService(db_session)
-    lock_tx_id = await tg_user_svc.lock_credits(tg_user_id, amount)
+    if lock_tx_id is None:
+        if amount is None:
+            raise ValueError("Either amount or lock_tx_id is required")
+        lock_tx_id = await tg_user_svc.lock_credits(tg_user_id, amount)
     try:
-        yield
+        yield lock_tx_id
     except Exception:
         await tg_user_svc.unlock_credits(tg_user_id, lock_tx_id)
         raise
