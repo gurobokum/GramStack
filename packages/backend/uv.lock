@@ -393,6 +393,7 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
     { name = "types-boto" },
+    { name = "uuid-utils" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -432,6 +433,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.40,<3" },
     { name = "structlog", specifier = ">=25.2.0,<26" },
     { name = "types-boto", extras = ["boto3", "s3"], specifier = ">=2.49.18.20241019,<3" },
+    { name = "uuid-utils", specifier = ">=0.17.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.2,<0.35" },
 ]
 

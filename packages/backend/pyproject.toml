@@ -28,6 +28,7 @@ dependencies = [
     "dishka>=1.6.0,<2",
     "redis[hiredis]>=5.3.1",
     "posthog>=7.45.3",
+    "uuid-utils>=0.17.0",
 ]
 
 [dependency-groups]

@@ -1,7 +1,7 @@
 import base64
 from datetime import UTC, datetime
 from typing import Any, TypeVar, cast
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import sqlalchemy
 from fastapi.encoders import jsonable_encoder
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn, mapped_column
 from sqlalchemy.sql.operators import OperatorType
 from sqlalchemy.types import TIMESTAMP
+from uuid_utils.compat import uuid7
 
 from app.conf import settings
 from app.core import crypto
@@ -161,7 +162,7 @@ class RecordModel(TimestampModel):
     __abstract__ = True
 
     id: MappedColumn[UUID] = mapped_column(
-        PostgresUUID, primary_key=True, default=uuid4
+        PostgresUUID, primary_key=True, default=uuid7
     )
 
     def __str__(self) -> str:
