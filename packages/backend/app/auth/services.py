@@ -4,7 +4,11 @@ from uuid import UUID
 
 from sqlalchemy import sql
 
-from app.auth.errors import InsufficientCreditsError, InvalidInviteCodeError
+from app.auth.errors import (
+    CreditsLockExpiredError,
+    InsufficientCreditsError,
+    InvalidInviteCodeError,
+)
 from app.auth.models import TGInviteCode, TGUser
 from app.conf import settings
 from app.core.errors import AppError
@@ -151,22 +155,24 @@ class TGUserService(BaseService):
         return tg_user
 
     async def lock_credits(self, tg_user_id: int, amount: int) -> UUID:
+        lock_tx: TGUserCreditsTx | None = None
         async with self.tx():
-            if not await self.has_credits(tg_user_id):
-                raise InsufficientCreditsError
-
-            lock_tx = TGUserCreditsTx(
-                tg_user_id=tg_user_id, amount=amount, status=CreditsTxStatus.LOCKED
-            )
-            self.db_session.add(lock_tx)
-            await self.db_session.execute(
-                sql.update(TGUser)
-                .filter_by(tg_id=tg_user_id)
-                .values(credits_balance=TGUser.credits_balance - amount)
-            )
+            if await self.has_credits(tg_user_id):
+                lock_tx = TGUserCreditsTx(
+                    tg_user_id=tg_user_id, amount=amount, status=CreditsTxStatus.LOCKED
+                )
+                self.db_session.add(lock_tx)
+                await self.db_session.execute(
+                    sql.update(TGUser)
+                    .filter_by(tg_id=tg_user_id)
+                    .values(credits_balance=TGUser.credits_balance - amount)
+                )
+        if lock_tx is None:
+            raise InsufficientCreditsError
         return lock_tx.id
 
     async def unlock_credits(self, tg_user_id: int, locked_tx_id: UUID) -> None:
+        unlocked = False
         async with self.tx():
             lock_result = await self.db_session.execute(
                 sql.select(TGUserCreditsTx).filter_by(
@@ -176,30 +182,43 @@ class TGUserService(BaseService):
                     deleted_at=None,
                 )
             )
-            lock_tx = lock_result.scalar_one()
-            lock_tx.deleted_at = utc_now()
-
-            await self.db_session.execute(
-                sql.update(TGUser)
-                .filter_by(tg_id=tg_user_id)
-                .values(credits_balance=TGUser.credits_balance + lock_tx.amount)
+            lock_tx = lock_result.scalar_one_or_none()
+            if lock_tx is not None:
+                lock_tx.deleted_at = utc_now()
+                await self.db_session.execute(
+                    sql.update(TGUser)
+                    .filter_by(tg_id=tg_user_id)
+                    .values(credits_balance=TGUser.credits_balance + lock_tx.amount)
+                )
+                unlocked = True
+        if not unlocked:
+            raise CreditsLockExpiredError(
+                f"Locked credits transaction is not found: '{locked_tx_id}'"
             )
 
     async def confirm_locked_credits(self, tg_user_id: int, locked_tx_id: UUID) -> None:
+        error: AppError | None = None
         async with self.tx():
             if not await self.has_credits(tg_user_id):
-                raise InsufficientCreditsError
-
-            lock_result = await self.db_session.execute(
-                sql.select(TGUserCreditsTx).filter_by(
-                    id=locked_tx_id,
-                    tg_user_id=tg_user_id,
-                    status=CreditsTxStatus.LOCKED,
-                    deleted_at=None,
+                error = InsufficientCreditsError()
+            else:
+                lock_result = await self.db_session.execute(
+                    sql.select(TGUserCreditsTx).filter_by(
+                        id=locked_tx_id,
+                        tg_user_id=tg_user_id,
+                        status=CreditsTxStatus.LOCKED,
+                        deleted_at=None,
+                    )
                 )
-            )
-            lock_tx = lock_result.scalar_one()
-            lock_tx.deleted_at = utc_now()
+                lock_tx = lock_result.scalar_one_or_none()
+                if lock_tx is None:
+                    error = CreditsLockExpiredError(
+                        f"Locked credits transaction is not found: '{locked_tx_id}'"
+                    )
+                else:
+                    lock_tx.deleted_at = utc_now()
+        if error is not None:
+            raise error
 
     async def has_credits(self, tg_user_id: int) -> bool:
         async with self.tx():
