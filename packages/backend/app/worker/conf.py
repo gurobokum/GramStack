@@ -5,10 +5,11 @@ from datetime import datetime
 from typing import Any, Protocol, TypedDict
 
 import structlog
-from arq.connections import RedisSettings
+from arq.connections import ArqRedis, RedisSettings, create_pool
 from arq.cron import CronJob, cron
 from arq.worker import Function, func
 from pydantic import BaseModel, ConfigDict
+from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.conf import settings
@@ -20,6 +21,8 @@ logger = structlog.get_logger()
 class WorkerContext(TypedDict):
     engine: AsyncEngine
     db_session_maker: AsyncSessionMaker
+    arq: ArqRedis
+    redis: AsyncRedis
 
 
 class JobContext(BaseModel):
@@ -30,6 +33,8 @@ class JobContext(BaseModel):
     score: int
 
     engine: AsyncEngine
+    arq: ArqRedis
+    redis: AsyncRedis
     db_session_maker: AsyncSessionMaker
     db_session: AsyncSession
 
@@ -59,10 +64,21 @@ class WorkerSettings:
         )
         engine = ctx["engine"] = create_async_engine(settings.DATABASE_URL, "worker")
         ctx["db_session_maker"] = create_session_maker(engine)
+        ctx["redis"] = AsyncRedis.from_url(
+            settings.REDIS_URL.get_secret_value(),
+            encoding="utf-8",
+            decode_responses=True,
+        )
+        ctx["arq"] = await create_pool(
+            WorkerSettings.redis_settings,
+            default_queue_name=WorkerSettings.queue_name,
+        )
 
     @staticmethod
     async def on_shutdown(ctx: WorkerContext) -> None:
         await ctx["engine"].dispose()
+        await ctx["redis"].aclose()
+        await ctx["arq"].aclose()
         logger.info("Worker shutdown")
 
 
