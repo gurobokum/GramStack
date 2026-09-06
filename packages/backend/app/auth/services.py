@@ -1,4 +1,7 @@
 import secrets
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +19,12 @@ from app.core.services import BaseService
 from app.credits.models import CreditsTxStatus, TGUserCreditsTx
 from app.models.base import utc_now
 from app.tgbot.schemas import UserTGData
+
+
+@dataclass(frozen=True, slots=True)
+class ExpiredCredits:
+    count: int
+    total: int
 
 
 class TGUserService(BaseService):
@@ -219,6 +228,40 @@ class TGUserService(BaseService):
                     lock_tx.deleted_at = utc_now()
         if error is not None:
             raise error
+
+    async def expire_locked_credits(self, older_than: timedelta) -> ExpiredCredits:
+        """
+        Reclaim locks left behind by dead workers: flip stale LOCKED transactions
+        to EXPIRED and refund their amounts. Claiming the rows in one guarded
+        UPDATE makes this safe to run concurrently and safe to re-run - a second
+        sweep matches nothing.
+        """
+        count = 0
+        refunds: defaultdict[int, int] = defaultdict(int)
+        async with self.tx():
+            result = await self.db_session.execute(
+                sql.update(TGUserCreditsTx)
+                .filter(
+                    TGUserCreditsTx.status == CreditsTxStatus.LOCKED,
+                    TGUserCreditsTx.deleted_at.is_(None),
+                    TGUserCreditsTx.created_at < utc_now() - older_than,
+                )
+                .values(status=CreditsTxStatus.EXPIRED, deleted_at=utc_now())
+                .returning(TGUserCreditsTx.tg_user_id, TGUserCreditsTx.amount)
+            )
+            for tg_user_id, amount in result.all():
+                count += 1
+                # tg_user_id is nullable (ondelete SET NULL) - such a row is
+                # expired but has nothing left to refund.
+                if tg_user_id is not None:
+                    refunds[tg_user_id] += amount
+            for tg_user_id, amount in refunds.items():
+                await self.db_session.execute(
+                    sql.update(TGUser)
+                    .filter_by(tg_id=tg_user_id)
+                    .values(credits_balance=TGUser.credits_balance + amount)
+                )
+        return ExpiredCredits(count=count, total=sum(refunds.values()))
 
     async def has_credits(self, tg_user_id: int) -> bool:
         async with self.tx():

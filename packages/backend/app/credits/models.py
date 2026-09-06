@@ -9,6 +9,7 @@ from app.models.base import PydanticJSON, RecordModel, ValueEnum
 
 class CreditsTxStatus(str, enum.Enum):
     LOCKED = "locked"
+    EXPIRED = "expired"
 
 
 class TGUserCreditsTx(RecordModel):

@@ -1,4 +1,5 @@
 import app.tasks  # noqa
+import app.credits.tasks  # noqa
 import app.models.all  # noqa
 # from app.logging import configure_logging
 
