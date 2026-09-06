@@ -8,7 +8,7 @@ from telegram import Bot, LabeledPrice
 from app.conf import settings
 from app.core.http_errors import HTTPUnauthorizedError
 from app.credits.schemas import BuyCreditsRequest, CreditsPackage
-from app.credits.services import TGUserCreditsService
+from app.credits.services import CreditsPurchaseService
 from app.dependencies import AuthUser
 from app.openapi import generate_unique_id_function
 
@@ -48,7 +48,9 @@ async def list_packages(
 async def send_invoice(
     user: AuthUser,
     data: BuyCreditsRequest,
-    credits_svc: Annotated[TGUserCreditsService, Depends(TGUserCreditsService.inject)],
+    credits_svc: Annotated[
+        CreditsPurchaseService, Depends(CreditsPurchaseService.inject)
+    ],
 ) -> None:
     try:
         package = [

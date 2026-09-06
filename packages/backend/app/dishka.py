@@ -6,7 +6,7 @@ from dishka.integrations.base import wrap_injection
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.services import TGInviteCodesService, TGUserService
-from app.credits.services import TGUserCreditsService
+from app.credits.services import CreditsPurchaseService, CreditsService
 
 
 def inject(
@@ -37,7 +37,11 @@ class ServicesProvider(Provider):
         return TGInviteCodesService(db_session)
 
     @provide
-    async def get_credits_service(
+    async def get_credits_service(self, db_session: AsyncSession) -> CreditsService:
+        return CreditsService(db_session)
+
+    @provide
+    async def get_credits_purchase_service(
         self, db_session: AsyncSession
-    ) -> TGUserCreditsService:
-        return TGUserCreditsService(db_session)
+    ) -> CreditsPurchaseService:
+        return CreditsPurchaseService(db_session)

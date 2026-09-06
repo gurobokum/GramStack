@@ -1,30 +1,15 @@
 import secrets
-from collections import defaultdict
-from dataclasses import dataclass
-from datetime import timedelta
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import sql
 
-from app.auth.errors import (
-    CreditsLockExpiredError,
-    InsufficientCreditsError,
-    InvalidInviteCodeError,
-)
+from app.auth.errors import InvalidInviteCodeError
 from app.auth.models import TGInviteCode, TGUser
 from app.conf import settings
 from app.core.errors import AppError
 from app.core.services import BaseService
-from app.credits.models import CreditsTxStatus, TGUserCreditsTx
 from app.models.base import utc_now
 from app.tgbot.schemas import UserTGData
-
-
-@dataclass(frozen=True, slots=True)
-class ExpiredCredits:
-    count: int
-    total: int
 
 
 class TGUserService(BaseService):
@@ -151,125 +136,6 @@ class TGUserService(BaseService):
                 sql.select(sql.func.count(TGUser.tg_id))
             )
         return result.scalar_one()
-
-    async def add_credits(self, tg_user_id: int, amount: int) -> TGUser:
-        async with self.tx():
-            result = await self.db_session.execute(
-                sql.update(TGUser)
-                .filter_by(tg_id=tg_user_id)
-                .values(credits_balance=TGUser.credits_balance + amount)
-                .returning(TGUser)
-            )
-            tg_user = result.scalar_one()
-        return tg_user
-
-    async def lock_credits(self, tg_user_id: int, amount: int) -> UUID:
-        lock_tx: TGUserCreditsTx | None = None
-        async with self.tx():
-            if await self.has_credits(tg_user_id):
-                lock_tx = TGUserCreditsTx(
-                    tg_user_id=tg_user_id, amount=amount, status=CreditsTxStatus.LOCKED
-                )
-                self.db_session.add(lock_tx)
-                await self.db_session.execute(
-                    sql.update(TGUser)
-                    .filter_by(tg_id=tg_user_id)
-                    .values(credits_balance=TGUser.credits_balance - amount)
-                )
-        if lock_tx is None:
-            raise InsufficientCreditsError
-        return lock_tx.id
-
-    async def unlock_credits(self, tg_user_id: int, locked_tx_id: UUID) -> None:
-        unlocked = False
-        async with self.tx():
-            lock_result = await self.db_session.execute(
-                sql.select(TGUserCreditsTx).filter_by(
-                    id=locked_tx_id,
-                    tg_user_id=tg_user_id,
-                    status=CreditsTxStatus.LOCKED,
-                    deleted_at=None,
-                )
-            )
-            lock_tx = lock_result.scalar_one_or_none()
-            if lock_tx is not None:
-                lock_tx.deleted_at = utc_now()
-                await self.db_session.execute(
-                    sql.update(TGUser)
-                    .filter_by(tg_id=tg_user_id)
-                    .values(credits_balance=TGUser.credits_balance + lock_tx.amount)
-                )
-                unlocked = True
-        if not unlocked:
-            raise CreditsLockExpiredError(
-                f"Locked credits transaction is not found: '{locked_tx_id}'"
-            )
-
-    async def confirm_locked_credits(self, tg_user_id: int, locked_tx_id: UUID) -> None:
-        error: AppError | None = None
-        async with self.tx():
-            if not await self.has_credits(tg_user_id):
-                error = InsufficientCreditsError()
-            else:
-                lock_result = await self.db_session.execute(
-                    sql.select(TGUserCreditsTx).filter_by(
-                        id=locked_tx_id,
-                        tg_user_id=tg_user_id,
-                        status=CreditsTxStatus.LOCKED,
-                        deleted_at=None,
-                    )
-                )
-                lock_tx = lock_result.scalar_one_or_none()
-                if lock_tx is None:
-                    error = CreditsLockExpiredError(
-                        f"Locked credits transaction is not found: '{locked_tx_id}'"
-                    )
-                else:
-                    lock_tx.deleted_at = utc_now()
-        if error is not None:
-            raise error
-
-    async def expire_locked_credits(self, older_than: timedelta) -> ExpiredCredits:
-        """
-        Reclaim locks left behind by dead workers: flip stale LOCKED transactions
-        to EXPIRED and refund their amounts. Claiming the rows in one guarded
-        UPDATE makes this safe to run concurrently and safe to re-run - a second
-        sweep matches nothing.
-        """
-        count = 0
-        refunds: defaultdict[int, int] = defaultdict(int)
-        async with self.tx():
-            result = await self.db_session.execute(
-                sql.update(TGUserCreditsTx)
-                .filter(
-                    TGUserCreditsTx.status == CreditsTxStatus.LOCKED,
-                    TGUserCreditsTx.deleted_at.is_(None),
-                    TGUserCreditsTx.created_at < utc_now() - older_than,
-                )
-                .values(status=CreditsTxStatus.EXPIRED, deleted_at=utc_now())
-                .returning(TGUserCreditsTx.tg_user_id, TGUserCreditsTx.amount)
-            )
-            for tg_user_id, amount in result.all():
-                count += 1
-                # tg_user_id is nullable (ondelete SET NULL) - such a row is
-                # expired but has nothing left to refund.
-                if tg_user_id is not None:
-                    refunds[tg_user_id] += amount
-            for tg_user_id, amount in refunds.items():
-                await self.db_session.execute(
-                    sql.update(TGUser)
-                    .filter_by(tg_id=tg_user_id)
-                    .values(credits_balance=TGUser.credits_balance + amount)
-                )
-        return ExpiredCredits(count=count, total=sum(refunds.values()))
-
-    async def has_credits(self, tg_user_id: int) -> bool:
-        async with self.tx():
-            result = await self.db_session.execute(
-                sql.select(TGUser.credits_balance).filter_by(tg_id=tg_user_id)
-            )
-        credit = result.scalar_one()
-        return credit > 0
 
 
 class TGInviteCodesService(BaseService):

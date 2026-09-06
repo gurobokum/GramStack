@@ -9,7 +9,7 @@ from app.auth.models import TGUser
 from app.core.errors import AppError, NotFoundError
 from app.credits.i18n import HandlersTexts as CreditsHandlersTexts
 from app.credits.models import CreditsPurchaseStatus
-from app.credits.services import TGUserCreditsService
+from app.credits.services import CreditsPurchaseService
 from app.tgbot.context import Context
 from app.tgbot.dishka import inject
 
@@ -19,7 +19,7 @@ async def pre_checkout(
     update: Update,
     context: Context,
     user: FromDishka[TGUser],
-    credits_svc: FromDishka[TGUserCreditsService],
+    credits_svc: FromDishka[CreditsPurchaseService],
 ) -> None:
     query = update.pre_checkout_query
     if not query:
@@ -52,7 +52,7 @@ async def complete_payment(
     update: Update,
     context: Context,
     user: FromDishka[TGUser],
-    credits_svc: FromDishka[TGUserCreditsService],
+    credits_svc: FromDishka[CreditsPurchaseService],
     texts: FromDishka[CreditsHandlersTexts],
 ) -> None:
     message = update.message

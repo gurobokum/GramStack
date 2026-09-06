@@ -9,27 +9,26 @@ from app.models.base import PydanticJSON, RecordModel, ValueEnum
 
 class CreditsTxStatus(str, enum.Enum):
     LOCKED = "locked"
+    CONFIRMED = "confirmed"
+    CANCELED = "canceled"
     EXPIRED = "expired"
 
 
-class TGUserCreditsTx(RecordModel):
-    __tablename__ = "tg_user_credits_transactions"
+class CreditsTx(RecordModel):
+    __tablename__ = "credits_transactions"
     __table_args__ = (
-        CheckConstraint(
-            "amount > 0", name="tg_user_credits_transactions__amount_positive"
-        ),
-        Index("ix_tg_user_credits_transactions__deleted_at", "deleted_at"),
+        CheckConstraint("amount > 0", name="credits_transactions__amount_positive"),
+        Index("ix_credits_transactions__deleted_at", "deleted_at"),
         Index(
-            "ix_tg_user_credits_transactions__hanging_transactions",
-            "created_at",
-            "deleted_at",
+            "ix_credits_transactions__hanging_transactions",
             "status",
+            "created_at",
         ),
     )
 
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[CreditsTxStatus] = mapped_column(
-        ValueEnum(CreditsTxStatus, name="tg_user_credits_transaction_status"),
+        ValueEnum(CreditsTxStatus, name="credits_transaction_status"),
         default=CreditsTxStatus.LOCKED,
         nullable=False,
     )
@@ -55,11 +54,11 @@ class StarsPurchaseMetadata(BaseModel):
     package_name: str
 
 
-class TGUserCreditsPurchase(RecordModel):
-    __tablename__ = "tg_user_credits_purchases"
+class CreditsPurchase(RecordModel):
+    __tablename__ = "credits_purchases"
     __table_args__ = (
         Index(
-            "ix_tg_user_credits_transactions__hanging_purchases",
+            "ix_credits_purchases__hanging_purchases",
             "status",
             "created_at",
         ),
@@ -74,7 +73,7 @@ class TGUserCreditsPurchase(RecordModel):
         nullable=True,
     )
     status: Mapped[CreditsPurchaseStatus] = mapped_column(
-        ValueEnum(CreditsPurchaseStatus, name="tg_user_credits_purchase_status"),
+        ValueEnum(CreditsPurchaseStatus, name="credits_purchase_status"),
         default=CreditsPurchaseStatus.INITIAL,
         nullable=False,
     )
