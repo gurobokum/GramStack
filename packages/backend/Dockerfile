@@ -28,3 +28,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 USER $APP_USER
 COPY --chown=$APP_USER:$APP_USER . .
+RUN python -m scripts.generate_i18n
