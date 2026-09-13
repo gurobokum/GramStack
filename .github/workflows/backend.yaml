@@ -41,10 +41,10 @@ jobs:
           - 6379:6379
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/backend/uv.lock
@@ -69,7 +69,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: deploy
@@ -78,7 +78,7 @@ jobs:
           echo "Deploying..."
       - name: Notify on failure
         if: ${{ failure() }}
-        uses: appleboy/telegram-action@master
+        uses: appleboy/telegram-action@v1.1.1
         with:
           to: ${{ vars.TELEGRAM_UPDATES_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
@@ -89,7 +89,7 @@ jobs:
             https://github.com/${{ github.repository }}/actions/runs/${{github.run_id}}
       - name: Notify on success
         if: ${{ success() }}
-        uses: appleboy/telegram-action@master
+        uses: appleboy/telegram-action@v1.1.1
         with:
           to: ${{ vars.TELEGRAM_UPDATES_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
