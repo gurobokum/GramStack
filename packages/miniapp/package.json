@@ -13,8 +13,8 @@
     "format": "prettier --write **/*.ts",
     "format:check": "prettier --check **/*.ts",
     "i18next": "i18next 'src/**/*.{ts,tsx}' 'app/**/*.{ts,tsx}'",
-    "ts": "tsc --noEmit",
-    "tsw": "tsc --noEmit --watch"
+    "ts": "next typegen && tsc --noEmit",
+    "tsw": "next typegen && tsc --noEmit --watch"
   },
   "dependencies": {
     "@hey-api/client-fetch": "^0.10.0",
