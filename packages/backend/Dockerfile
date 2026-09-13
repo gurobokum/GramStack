@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM docker.io/python:3.13.3-slim-bullseye
+FROM docker.io/python:3.13.15-slim-trixie
 
 LABEL name="GramStack" \
       maintainer="Guro Bokum <jiojiajiu@gmail.com>" \
@@ -12,23 +12,19 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/usr/local \
     UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never \
     APP_USER=gramstack \
     APP_HOME=/app
 
+COPY --from=ghcr.io/astral-sh/uv:0.12.13 /uv /uvx /usr/local/bin/
+
 RUN useradd --create-home $APP_USER
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        curl \
-        build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR $APP_HOME
 
 COPY --chown=$APP_USER:$APP_USER uv.lock pyproject.toml ./
-RUN uv sync --frozen --no-install-project --no-cache
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
 
 USER $APP_USER
 COPY --chown=$APP_USER:$APP_USER . .
