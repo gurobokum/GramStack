@@ -95,6 +95,13 @@ After any backend API change, regenerate the SDK:
 pnpm generate_openapi
 ```
 
+After any model change, create a migration and apply it (from `packages/backend`):
+
+```bash
+uv run task makemigrations "add something"
+uv run task migrate
+```
+
 Common checks (backend commands run from `packages/backend`):
 
 ```bash
