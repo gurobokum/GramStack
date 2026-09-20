@@ -63,15 +63,16 @@ class TGBotRootProvider(Provider):
         return Page(context.page)
 
     @provide(scope=Scope.REQUEST)
-    async def signin_user(self, update: Update, db_session: AsyncSession) -> TGUser:
+    async def get_user(self, update: Update, db_session: AsyncSession) -> TGUser | None:
         user_data = extract_user_data(update)
         if not user_data:
-            raise AppError("User data is None")
+            return None
+        return await TGUserService(db_session).get_user_and_update(user_data)
 
-        user_svc = TGUserService(db_session)
-        tg_user = await user_svc.get_user_and_update(user_data)
+    @provide(scope=Scope.REQUEST)
+    def signin_user(self, tg_user: TGUser | None) -> TGUser:
         if not tg_user:
-            raise ForbiddenError("User not found", tg_id=user_data.tg_id)
+            raise ForbiddenError("User not found")
         if tg_user.is_banned:
             raise UserIsBannedError
 

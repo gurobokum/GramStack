@@ -182,7 +182,7 @@ class CreditsPurchaseService(BaseService):
             result = await self.db_session.execute(
                 sql.select(CreditsPurchase).filter_by(id=purchase_id)
             )
-        return result.scalar_one()
+        return result.scalar_one_or_none()
 
     async def init_credits_purchase(
         self, tg_user_id: int, package: CreditsPackage

@@ -10,6 +10,12 @@ handlers:
 
         https://github.com/gurobokum/gramstack
       button_setup: Открыть приложение
+    lang:
+      current_text: "Ваш язык:"
+      selected_text: "Выбран язык:"
+    commands:
+      start: старт
+      lang: выбор языка
     error_handler:
       banned_text: Ваш аккаунт заблокирован.
   en:
@@ -24,5 +30,11 @@ handlers:
 
         https://github.com/gurobokum/gramstack
       button_setup: Open the app
+    lang:
+      current_text: "Your language:"
+      selected_text: "Language selected:"
+    commands:
+      start: start
+      lang: choose language
     error_handler:
       banned_text: Your account has been banned.

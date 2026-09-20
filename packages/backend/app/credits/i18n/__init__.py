@@ -31,7 +31,5 @@ class TGBotCreditsI18NProvider(Provider):
     """
 
     @provide(scope=Scope.REQUEST)
-    def get_credits_handlers_texts(
-        self, language_code: FromDishka[Language]
-    ) -> HandlersTexts:
-        return get_texts(TEXTS, language_code)
+    def get_credits_handlers_texts(self, lang: FromDishka[Language]) -> HandlersTexts:
+        return get_texts(TEXTS, lang)

@@ -15,20 +15,54 @@ def make_update(
     user_id: int = 1001,
     chat_id: int | None = None,
     language_code: str = "en",
+    photo_file_id: str | None = None,
 ) -> Update:
     chat_id = chat_id if chat_id is not None else user_id
-    entities: list[dict[str, Any]] = []
-    if text.startswith("/"):
-        entities.append(
-            {"type": "bot_command", "offset": 0, "length": len(text.split()[0])}
-        )
+    message: dict[str, Any] = {
+        "message_id": 1,
+        "date": 1,
+        "chat": {"id": chat_id, "type": "private"},
+        "from": {
+            "id": user_id,
+            "is_bot": False,
+            "first_name": "Test",
+            "username": f"testuser{user_id}",
+            "language_code": language_code,
+        },
+    }
+    if photo_file_id is not None:
+        message["photo"] = [
+            {
+                "file_id": photo_file_id,
+                "file_unique_id": "u1",
+                "width": 100,
+                "height": 100,
+            }
+        ]
+    else:
+        entities: list[dict[str, Any]] = []
+        if text.startswith("/"):
+            entities.append(
+                {"type": "bot_command", "offset": 0, "length": len(text.split()[0])}
+            )
+        message["text"] = text
+        message["entities"] = entities
+    return Update.de_json({"update_id": 1, "message": message}, bot)
+
+
+def make_callback_update(
+    bot: ExtBot[None],
+    *,
+    data: str,
+    user_id: int = 1001,
+    language_code: str = "en",
+) -> Update:
     return Update.de_json(
         {
-            "update_id": 1,
-            "message": {
-                "message_id": 1,
-                "date": 1,
-                "chat": {"id": chat_id, "type": "private"},
+            "update_id": 3,
+            "callback_query": {
+                "id": "1",
+                "chat_instance": "1",
                 "from": {
                     "id": user_id,
                     "is_bot": False,
@@ -36,8 +70,13 @@ def make_update(
                     "username": f"testuser{user_id}",
                     "language_code": language_code,
                 },
-                "text": text,
-                "entities": entities,
+                "message": {
+                    "message_id": 1,
+                    "date": 1,
+                    "chat": {"id": user_id, "type": "private"},
+                    "text": "page",
+                },
+                "data": data,
             },
         },
         bot,

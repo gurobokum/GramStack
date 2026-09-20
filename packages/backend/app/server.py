@@ -63,6 +63,6 @@ async def root() -> dict[str, str]:
 
 
 configure_logging(name="api")
-if settings.LOGFIRE_TOKEN:
+if settings.LOGFIRE_TOKEN and settings.LOGFIRE_FASTAPI:
     logfire.instrument_fastapi(app, capture_headers=False)
 configure_openapi(app)

@@ -37,7 +37,7 @@ async def broadcast_all_users(
     users who already got it. Returns (success_count, fail_count).
     """
     structlog.contextvars.bind_contextvars(event_name=event_name)
-    logger.info("broadcast_started")
+    logger.info("Broadcast started")
 
     event_key = f"{BROADCAST_PREFIX}:{event_name}"
     should_exit = False
@@ -63,13 +63,15 @@ async def broadcast_all_users(
 
             for user in users:
                 if total <= 0:
-                    logger.info("broadcast_limit_reached")
+                    logger.info("Broadcast total limit reached")
                     should_exit = True
                     break
 
                 was_sent = await redis.get(f"{event_key}:user:{user.tg_id}")
                 if was_sent:
-                    logger.info("broadcast_already_sent", tg_user_id=user.tg_id)
+                    logger.info(
+                        "Broadcast is already sent to the user", tg_user_id=user.tg_id
+                    )
                     continue
 
                 if photo is not None:
@@ -92,7 +94,9 @@ async def broadcast_all_users(
                     sent = await send_or_mark_blocked(user_svc, user.tg_id, send)
                 except Exception as e:
                     logger.error(
-                        "broadcast_send_failed", tg_user_id=user.tg_id, error=str(e)
+                        "Failed to send the broadcast to the user",
+                        tg_user_id=user.tg_id,
+                        error=str(e),
                     )
                     await count("fail")
                 else:
@@ -108,7 +112,7 @@ async def broadcast_all_users(
                             posthog.capture(user.tg_id, PostHogEvent.USER_UNBLOCKED_BOT)
                         total -= 1
                         await count("success")
-                        logger.info("broadcast_sent", tg_user_id=user.tg_id)
+                        logger.info("Broadcast sent to the user", tg_user_id=user.tg_id)
                     else:
                         await count("fail")
                 await asyncio.sleep(delay)
@@ -116,6 +120,6 @@ async def broadcast_all_users(
     success_count = int(await redis.get(f"{event_key}:success") or 0)
     fail_count = int(await redis.get(f"{event_key}:fail") or 0)
     logger.info(
-        "broadcast_completed", success_count=success_count, fail_count=fail_count
+        "Broadcast completed", success_count=success_count, fail_count=fail_count
     )
     return success_count, fail_count

@@ -3,8 +3,16 @@ from typing import Any, Generic, TypeVar, cast
 
 import structlog
 from pydantic import BaseModel
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
-from telegram.error import Forbidden
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions,
+    Message,
+    MessageEntity,
+    Update,
+    WebAppInfo,
+)
+from telegram.error import BadRequest, Forbidden
 
 from app.auth.services import TGUserService
 from app.posthog import PostHogEvent, posthog
@@ -12,6 +20,12 @@ from app.tgbot.context import Context
 from app.tgbot.schemas import UserTGData
 
 logger = structlog.get_logger()
+
+SUPPORTED_LANGUAGES = ("en", "ru")
+# Post-Soviet language codes default to Russian; the Baltics stay on English.
+RU_DEFAULT_LANGUAGE_CODES = frozenset(
+    {"az", "be", "hy", "ka", "kk", "ky", "tg", "tk", "uk", "uz"}
+)
 
 
 async def send_or_mark_blocked(
@@ -29,6 +43,37 @@ async def send_or_mark_blocked(
             posthog.capture(tg_user_id, PostHogEvent.USER_BLOCKED_BOT)
         return False
     return True
+
+
+async def edit_page(
+    message: Message,
+    text: str,
+    markup: InlineKeyboardMarkup | None,
+    link_preview_options: LinkPreviewOptions | None = None,
+    entities: Sequence[MessageEntity] | None = None,
+) -> None:
+    """
+    Edit a self-updating menu message in place. The "message is not
+    modified" error a Refresh-style edit produces is ignored; on any other
+    edit failure the page is sent as a new message instead.
+    """
+    try:
+        await message.edit_text(
+            text=text,
+            reply_markup=markup,
+            link_preview_options=link_preview_options,
+            entities=entities,
+        )
+    except BadRequest as e:
+        if "not modified" in str(e).lower():
+            return
+        logger.warning("Failed to edit the message, sending a new one", error=str(e))
+        await message.chat.send_message(
+            text=text,
+            reply_markup=markup,
+            link_preview_options=link_preview_options,
+            entities=entities,
+        )
 
 
 type KeyboardButton = tuple[str, str | WebAppInfo]
@@ -91,11 +136,16 @@ class LocalizedTexts(BaseModel, Generic[T]):
     ru: T
 
 
-def get_texts(texts: LocalizedTexts[T], lang: str) -> T:
-    if lang not in ("en", "ru"):
-        lang = "ru"
+def resolve_language(language_code: str) -> str:
+    if language_code in SUPPORTED_LANGUAGES:
+        return language_code
+    if language_code in RU_DEFAULT_LANGUAGE_CODES:
+        return "ru"
+    return "en"
 
-    bundle = getattr(texts, lang)
+
+def get_texts(texts: LocalizedTexts[T], lang: str) -> T:
+    bundle = getattr(texts, resolve_language(lang))
     if not bundle:
         raise ValueError(f"Language {lang} not found in bundle")
     return cast(T, bundle)

@@ -1,94 +1,22 @@
-import structlog
-from dishka import FromDishka
-from telegram import Chat, Update
-from telegram.constants import ParseMode
 from telegram.ext import CommandHandler
 
-from app.auth.models import TGAdminUser
-from app.auth.services import TGInviteCodesService
 from app.conf import settings
-from app.tgbot.admin.i18n import HandlersTexts
-from app.tgbot.context import Context
-from app.tgbot.dishka import inject
+from app.tgbot.admin.generate_invites import (
+    generate_invite_1,
+    generate_invite_10,
+    generate_invite_30,
+    generate_invites,
+)
+from app.tgbot.routing import Handlers
 
-logger = structlog.get_logger()
+handlers = Handlers(admin_only=True)
 
-
-@inject
-async def generate_invites(
-    update: Update,
-    context: Context,
-    chat: FromDishka[Chat],
-    admin: FromDishka[TGAdminUser],
-    invite_svc: FromDishka[TGInviteCodesService],
-    texts: FromDishka[HandlersTexts],
-) -> None:
-    await _generate_invites(chat, admin, invite_svc, texts, amount=10, uses=1)
-
-
-@inject
-async def generate_invite_1(
-    update: Update,
-    context: Context,
-    chat: FromDishka[Chat],
-    admin: FromDishka[TGAdminUser],
-    invite_svc: FromDishka[TGInviteCodesService],
-    texts: FromDishka[HandlersTexts],
-) -> None:
-    await _generate_invites(chat, admin, invite_svc, texts, amount=1, uses=1)
-
-
-@inject
-async def generate_invite_10(
-    update: Update,
-    context: Context,
-    chat: FromDishka[Chat],
-    admin: FromDishka[TGAdminUser],
-    invite_svc: FromDishka[TGInviteCodesService],
-    texts: FromDishka[HandlersTexts],
-) -> None:
-    await _generate_invites(chat, admin, invite_svc, texts, amount=1, uses=10)
-
-
-@inject
-async def generate_invite_30(
-    update: Update,
-    context: Context,
-    chat: FromDishka[Chat],
-    admin: FromDishka[TGAdminUser],
-    invite_svc: FromDishka[TGInviteCodesService],
-    texts: FromDishka[HandlersTexts],
-) -> None:
-    await _generate_invites(chat, admin, invite_svc, texts, amount=1, uses=30)
-
-
-async def _generate_invites(
-    chat: Chat,
-    admin: TGAdminUser,
-    invite_svc: TGInviteCodesService,
-    texts: HandlersTexts,
-    *,
-    amount: int,
-    uses: int,
-) -> None:
-    logger.info("generate_invites", tg_user_id=admin.tg_id, amount=amount, uses=uses)
-    invites = await invite_svc.create(
-        amount=amount, uses=uses, tg_user_id=admin.tg_id, is_created_by_admin=True
+if settings.TGBOT_REQUIRES_INVITE:
+    handlers.commands.extend(
+        [
+            CommandHandler("generate_invites", generate_invites),
+            CommandHandler("generate_invite_1", generate_invite_1),
+            CommandHandler("generate_invite_10", generate_invite_10),
+            CommandHandler("generate_invite_30", generate_invite_30),
+        ]
     )
-
-    invites_str = "\n".join(
-        f'{i + 1}. <a href="https://t.me/{settings.TGBOT_NAME}?start={invite.code}">https://t.me/{settings.TGBOT_NAME}?start={invite.code}</a>'
-        for i, invite in enumerate(invites)
-    )
-    await chat.send_message(
-        text=f"<b>{texts.generate_invites.header}</b>\n\n{invites_str}",
-        parse_mode=ParseMode.HTML,
-    )
-
-
-handlers = [
-    CommandHandler("generate_invites", generate_invites),
-    CommandHandler("generate_invite_1", generate_invite_1),
-    CommandHandler("generate_invite_10", generate_invite_10),
-    CommandHandler("generate_invite_30", generate_invite_30),
-]

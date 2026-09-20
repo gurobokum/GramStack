@@ -1,19 +1,28 @@
 import structlog
 from dishka import FromDishka
-from telegram import Chat, Update, WebAppInfo
+from telegram import Chat, InlineKeyboardMarkup, Message, Update, WebAppInfo
 from telegram.constants import ChatMemberStatus
-from telegram.ext import ChatMemberHandler, CommandHandler
+from telegram.ext import CallbackQueryHandler, ChatMemberHandler, CommandHandler
 
 from app.auth.errors import InvalidInviteCodeError
+from app.auth.models import TGUser
 from app.auth.services import TGUserService
 from app.conf import settings
 from app.core.errors import AppError, UserIsBannedError
 from app.posthog import PostHogEvent, posthog
-from app.tgbot.admin.handlers import handlers as admin_handlers
 from app.tgbot.context import Context
 from app.tgbot.dishka import inject
-from app.tgbot.i18n import HandlersTexts
-from app.tgbot.utils import extract_user_data, get_invite_code, keyboard
+from app.tgbot.i18n import LANGUAGE_LABELS, TEXTS, HandlersTexts
+from app.tgbot.routing import Handlers
+from app.tgbot.utils import (
+    SUPPORTED_LANGUAGES,
+    edit_page,
+    extract_user_data,
+    get_invite_code,
+    get_texts,
+    keyboard,
+    resolve_language,
+)
 
 logger = structlog.get_logger()
 
@@ -22,15 +31,15 @@ logger = structlog.get_logger()
 async def start(
     update: Update,
     context: Context,
-    texts: FromDishka[HandlersTexts],
+    user: FromDishka[TGUser | None],
     chat: FromDishka[Chat],
     user_svc: FromDishka[TGUserService],
+    texts: FromDishka[HandlersTexts],
 ) -> None:
     user_data = extract_user_data(update)
     if user_data is None:
         raise AppError("User data is None", chat_id=chat.id)
 
-    user = await user_svc.get_user_and_update(user_data)
     if not user:
         invite_code = get_invite_code(context)
         try:
@@ -57,6 +66,41 @@ async def start(
             [(texts.start.button_setup, WebAppInfo(settings.MINIAPP_URL))]
         ),
     )
+
+
+@inject
+async def lang(
+    update: Update,
+    context: Context,
+    user: FromDishka[TGUser],
+    chat: FromDishka[Chat],
+    texts: FromDishka[HandlersTexts],
+) -> None:
+    current_lang = user.language or resolve_language(user.language_code)
+    await chat.send_message(
+        text=f"{texts.lang.current_text} {LANGUAGE_LABELS[current_lang]}",
+        reply_markup=_lang_keyboard(),
+    )
+
+
+@inject
+async def lang_set(
+    update: Update,
+    context: Context,
+    user: FromDishka[TGUser],
+    message: FromDishka[Message],
+    user_svc: FromDishka[TGUserService],
+) -> None:
+    query = update.callback_query
+    if query is None or query.data is None:
+        return
+
+    selected_lang = query.data.split(":")[2]
+    user = await user_svc.update_user(user.tg_id, language=selected_lang)
+    texts = get_texts(TEXTS, selected_lang)
+    label = LANGUAGE_LABELS[selected_lang]
+    await query.answer(f"{texts.lang.selected_text} {label}")
+    await edit_page(message, f"{texts.lang.current_text} {label}", _lang_keyboard())
 
 
 @inject
@@ -102,8 +146,21 @@ async def track_bot_block(
         posthog.capture(tg_id, PostHogEvent.USER_UNBLOCKED_BOT)
 
 
-handlers = [
-    CommandHandler("start", start),
-    ChatMemberHandler(track_bot_block, ChatMemberHandler.MY_CHAT_MEMBER),
-    *admin_handlers,
-]
+handlers = Handlers(
+    commands=[CommandHandler("start", start)],
+    chat_members=[ChatMemberHandler(track_bot_block, ChatMemberHandler.MY_CHAT_MEMBER)],
+)
+
+if settings.TGBOT_LANG_COMMAND_ENABLED:
+    handlers.commands.append(CommandHandler("lang", lang))
+    handlers.callbacks.append(
+        CallbackQueryHandler(
+            lang_set, pattern=rf"^lang:set:({'|'.join(SUPPORTED_LANGUAGES)})$"
+        )
+    )
+
+
+def _lang_keyboard() -> InlineKeyboardMarkup:
+    return keyboard(
+        [(label, f"lang:set:{code}") for code, label in LANGUAGE_LABELS.items()]
+    )

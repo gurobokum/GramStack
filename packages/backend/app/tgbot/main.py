@@ -13,12 +13,13 @@ from app.credits.errors import InsufficientCreditsError
 from app.credits.handlers import handlers as credits_handlers
 from app.db import AsyncSessionMaker
 from app.posthog import PostHogEvent, posthog
+from app.tgbot.admin.handlers import handlers as admin_handlers
 from app.tgbot.app import TGApp, tg_app
 from app.tgbot.context import Context
 from app.tgbot.handlers import handlers, signin_middleware
 from app.tgbot.i18n import TEXTS
-from app.tgbot.routing import add_handlers
-from app.tgbot.utils import extract_user_data, get_texts
+from app.tgbot.routing import register
+from app.tgbot.utils import SUPPORTED_LANGUAGES, extract_user_data, get_texts
 from app.worker.conf import WorkerSettings
 
 logger = structlog.get_logger()
@@ -52,10 +53,10 @@ async def error_handler(update: object, context: Context) -> None:
 
 @asynccontextmanager
 async def start_tg_app(session_maker: AsyncSessionMaker) -> AsyncGenerator[TGApp]:
-    # The middleware stays outside add_handlers: page tracking there would
+    # The middleware stays outside register: page tracking there would
     # consume the stored page before the group-0 handler sees it.
     tg_app.add_handler(TypeHandler(Update, signin_middleware), group=-1)
-    add_handlers(tg_app, handlers, credits_handlers)
+    register(tg_app, handlers, credits_handlers, admin_handlers)
     tg_app.add_error_handler(error_handler)
 
     if settings.TGBOT_SETUP_COMMANDS:
@@ -98,18 +99,12 @@ async def start_tg_app(session_maker: AsyncSessionMaker) -> AsyncGenerator[TGApp
 
 
 async def setup_commands(tg_app: TGApp) -> None:
-    commands = {
-        "en": {
-            "start": "start",
-        },
-        "ru": {
-            "start": "старт",
-        },
-    }
-    # localize
-    for lang in ["en", "ru"]:
-        commands_lang = commands[lang]
+    for lang in SUPPORTED_LANGUAGES:
+        texts = get_texts(TEXTS, lang)
+        commands = {"start": texts.commands.start}
+        if settings.TGBOT_LANG_COMMAND_ENABLED:
+            commands["lang"] = texts.commands.lang
         await tg_app.bot.set_my_commands(
-            [BotCommand(k, v) for k, v in commands_lang.items()],
+            [BotCommand(k, v) for k, v in commands.items()],
             language_code=lang,
         )

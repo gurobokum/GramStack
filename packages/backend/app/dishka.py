@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.services import TGInviteCodesService, TGUserService
 from app.credits.services import CreditsPurchaseService, CreditsService
+from app.tgbot.services import ConfigService
 
 
 def inject(
@@ -45,3 +46,7 @@ class ServicesProvider(Provider):
         self, db_session: AsyncSession
     ) -> CreditsPurchaseService:
         return CreditsPurchaseService(db_session)
+
+    @provide
+    async def get_config_service(self, db_session: AsyncSession) -> ConfigService:
+        return ConfigService(db_session)

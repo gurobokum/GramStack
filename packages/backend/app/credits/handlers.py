@@ -13,6 +13,7 @@ from app.credits.services import CreditsPurchaseService
 from app.posthog import PostHogEvent, posthog
 from app.tgbot.context import Context
 from app.tgbot.dishka import inject
+from app.tgbot.routing import Handlers
 
 
 @inject
@@ -91,7 +92,9 @@ async def complete_payment(
     )
 
 
-handlers = [
-    PreCheckoutQueryHandler(pre_checkout),
-    MessageHandler(filters.SUCCESSFUL_PAYMENT, complete_payment),
-]
+handlers = Handlers(
+    payments=[
+        PreCheckoutQueryHandler(pre_checkout),
+        MessageHandler(filters.SUCCESSFUL_PAYMENT, complete_payment),
+    ]
+)

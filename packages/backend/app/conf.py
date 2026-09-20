@@ -45,13 +45,19 @@ class Settings(BaseSettings):
     STORAGE_ACCESS_KEY: SecretStr
     STORAGE_SECRET_KEY: SecretStr
 
+    # Optional -- Public storage (a bucket served without signed urls)
+    PUBLIC_STORAGE_URL: HttpUrl | None = None
+
     # Optional
     TGBOT_SETUP_COMMANDS: bool = False
     TGBOT_REQUIRES_INVITE: bool = False
+    TGBOT_LANG_COMMAND_ENABLED: bool = False
     TGBOT_WEBHOOK_URL: str | None = None
     TGBOT_WEBHOOK_SECRET_TOKEN: SecretStr | None = None
     CORS_ALLOW_ORIGINS: list[str] = []
     LOGFIRE_TOKEN: SecretStr | None = None
+    LOGFIRE_FASTAPI: bool = False
+    LOGFIRE_SQLALCHEMY: bool = False
     POSTHOG_API_KEY: SecretStr | None = None
     POSTHOG_HOST: str | None = None
     # Optional -- LLM

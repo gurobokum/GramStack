@@ -21,6 +21,7 @@ class TGUser(TimestampModel):
     last_name: Mapped[str] = string_column(64)
     phone: Mapped[str] = string_column(64)
     language_code: Mapped[str] = string_column(8)
+    language: Mapped[str] = string_column(8)
 
     is_bot: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_banned: Mapped[bool] = mapped_column(nullable=False, default=False)
