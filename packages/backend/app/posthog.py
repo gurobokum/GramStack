@@ -30,7 +30,9 @@ class AppPosthog(Posthog):  # type: ignore[misc]
         **kwargs: Any,
     ) -> None:
         props = {"tgbot_name": settings.TGBOT_NAME, **(properties or {})}
-        super().capture(distinct_id, event, props, **kwargs)
+        super().capture(
+            distinct_id=distinct_id, event=event, properties=props, **kwargs
+        )
 
 
 posthog = AppPosthog(
