@@ -1,9 +1,10 @@
 import pytest
 from pytest import MonkeyPatch
 from sqlalchemy import sql
+from sqlalchemy.orm import joinedload
 
 from app.auth.errors import InvalidInviteCodeError
-from app.auth.models import TGInviteCode
+from app.auth.models import TGInviteCode, TGUser
 from app.auth.services import TGInviteCodesService, TGUserService
 from app.conf import settings
 from app.db import AsyncSessionMaker
@@ -56,6 +57,22 @@ async def test_signup_records_inviter(db_session_maker: AsyncSessionMaker) -> No
     code = await create_invite(db_session_maker)
 
     assert await signup(db_session_maker, code) == (code, INVITER_ID)
+
+
+async def test_inviter_relationship(db_session_maker: AsyncSessionMaker) -> None:
+    code = await create_invite(db_session_maker)
+    await signup(db_session_maker, code)
+
+    async with db_session_maker() as session, session.begin():
+        result = await session.execute(
+            sql.select(TGUser)
+            .filter_by(tg_id=INVITED_ID)
+            .options(joinedload(TGUser.inviter))
+        )
+        user = result.scalar_one()
+
+    assert user.inviter is not None
+    assert user.inviter.tg_id == INVITER_ID
 
 
 async def test_signup_spends_one_use(db_session_maker: AsyncSessionMaker) -> None:

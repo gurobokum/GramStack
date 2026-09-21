@@ -1,7 +1,7 @@
 from typing import NewType
 
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import PostgresUUID, TimestampModel, string_column
 from app.tgbot.schemas import UserTGData
@@ -37,6 +37,12 @@ class TGUser(TimestampModel):
         ForeignKey("tg_users.tg_id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    # load it explicitly: select(TGUser).options(joinedload(TGUser.inviter))
+    inviter: Mapped["TGUser | None"] = relationship(
+        remote_side="TGUser.tg_id",
+        foreign_keys="TGUser.inviter_id",
+        lazy="raise_on_sql",
     )
 
     def get_diff(self, user_data: UserTGData) -> dict[str, str | bool]:
