@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import re
+from datetime import timedelta
 from typing import Annotated
 from urllib.parse import unquote
 
@@ -12,12 +13,17 @@ from starlette.status import HTTP_403_FORBIDDEN
 from app.auth.models import TGUser
 from app.auth.services import TGUserService
 from app.conf import settings
+from app.models.base import utc_now
 from app.tgbot.schemas import UserTGData
 
+INIT_DATA_TTL = timedelta(hours=6)
 
-async def validate_init_data(
-    auth_key: Annotated[str, Depends(APIKeyHeader(name="x-telegram-auth"))],
-) -> None:
+
+def validate_init_data(auth_key: str) -> dict[str, str]:
+    """
+    Check the telegram signature and the freshness of initData and return its
+    fields. Every request carries initData, so it is validated on every call.
+    """
     m = re.compile(r"^((.*?)&hash=(.*?))$").match(unquote(auth_key))
     if not m:
         raise HTTPException(
@@ -38,27 +44,37 @@ async def validate_init_data(
         secret_key, data_check_string.encode(), hashlib.sha256
     ).hexdigest()
 
-    if result_hash != data_hash:
+    if not hmac.compare_digest(result_hash, data_hash):
         raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Hash is not valid")
+
+    auth_date = data.get("auth_date")
+    if not auth_date or not auth_date.isdigit():
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN, detail="auth_date is required"
+        )
+
+    if utc_now().timestamp() > int(auth_date) + INIT_DATA_TTL.total_seconds():
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="auth_date is too old, please try again",
+        )
+
+    return data
 
 
 async def get_user_or_create_with_tg_data(
     auth_key: Annotated[str, Depends(APIKeyHeader(name="x-telegram-auth"))],
     tg_user_svc: Annotated[TGUserService, Depends(TGUserService.inject)],
 ) -> TGUser:
-    """
-    WARNING: Data is trusted and should be validated before calling this function
-    TODO: validate here one more time
-    """
-    m = re.compile(r"^((.*?)&hash=(.*?))$").match(unquote(auth_key))
-    if not m:
+    data = validate_init_data(auth_key)
+
+    user_data = data.get("user")
+    if not user_data:
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN, detail="Invalid authentication credentials"
         )
 
-    init_data = m.group(1)
-    data = {k: v for (k, v) in [p.split("=") for p in init_data.split("&")]}
-    user_tg_data = UserTGData.model_validate(json.loads(data["user"]))
+    user_tg_data = UserTGData.model_validate(json.loads(user_data))
     tg_user = await tg_user_svc.get_user_and_update(user_tg_data)
     if not tg_user:
         if settings.TGBOT_REQUIRES_INVITE:
