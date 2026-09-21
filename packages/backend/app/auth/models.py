@@ -31,8 +31,14 @@ class TGUser(TimestampModel):
     credits_balance: Mapped[int] = mapped_column(default=0, server_default="0")
 
     # Foreign keys
-    invite_code: Mapped[str] = mapped_column(
+    redeemed_invite_code: Mapped[str | None] = mapped_column(
         ForeignKey("tg_invite_codes.code"), nullable=True
+    )
+    inviter_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("tg_users.tg_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     def get_diff(self, user_data: UserTGData) -> dict[str, str | bool]:

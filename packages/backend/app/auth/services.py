@@ -20,23 +20,41 @@ class TGUserService(BaseService):
             raise InvalidInviteCodeError("Signup without invite code is disabled")
 
         async with self.tx():
-            if settings.TGBOT_REQUIRES_INVITE:
-                # check if invite code is valid
-                invite_result = await self.db_session.execute(
-                    sql.select(TGInviteCode).filter_by(code=invite_code)
-                )
-                tg_invite_code = invite_result.scalar_one_or_none()
-                if not tg_invite_code:
-                    raise InvalidInviteCodeError("Invite code isn't found")
+            values: dict[str, Any] = user_data.model_dump()
+            tg_invite_code = (
+                await self._redeem_invite_code(invite_code) if invite_code else None
+            )
+            if tg_invite_code:
+                values["redeemed_invite_code"] = tg_invite_code.code
+                values["inviter_id"] = tg_invite_code.tg_user_id
 
-                # decrement the invite code uses left
-                if tg_invite_code.uses_left <= 0:
-                    raise InvalidInviteCodeError("Invite code has no uses left")
-                tg_invite_code.uses_left -= 1
             result = await self.db_session.execute(
-                sql.insert(TGUser).values(**user_data.model_dump()).returning(TGUser)
+                sql.insert(TGUser).values(**values).returning(TGUser)
             )
         return result.scalar_one()
+
+    async def _redeem_invite_code(self, code: str) -> TGInviteCode | None:
+        """
+        Spend one use of the code. An unusable code raises only when invites are
+        required, otherwise the user signs up without an inviter.
+        """
+        result = await self.db_session.execute(
+            sql.select(TGInviteCode).filter_by(code=code)
+        )
+        tg_invite_code = result.scalar_one_or_none()
+
+        if tg_invite_code is None:
+            if settings.TGBOT_REQUIRES_INVITE:
+                raise InvalidInviteCodeError(f"Invite code isn't found: '{code}'")
+            return None
+
+        if tg_invite_code.uses_left <= 0:
+            if settings.TGBOT_REQUIRES_INVITE:
+                raise InvalidInviteCodeError(f"Invite code has no uses left: '{code}'")
+            return None
+
+        tg_invite_code.uses_left -= 1
+        return tg_invite_code
 
     @overload
     async def get_user(self, tg_user_id: int, *, required: Literal[True]) -> TGUser: ...
