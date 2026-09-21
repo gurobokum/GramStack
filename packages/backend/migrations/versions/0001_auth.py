@@ -18,7 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 # tg_users and tg_invite_codes reference each other, so this constraint is added
 # after both tables exist
-INVITE_CODE_FK = "fk_tg_users_tg_invite_codes__redeemed_invite_code"
+INVITE_CODE_FK = "fk_tg_users__redeemed_invite_code"
 
 
 def upgrade() -> None:
@@ -43,12 +43,12 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.CheckConstraint(
             "credits_balance >= 0",
-            name=op.f("ck_tg_users__tg_users__credits_balance_positive"),
+            name=op.f("ck_tg_users__credits_balance_positive"),
         ),
         sa.ForeignKeyConstraint(
             ["inviter_id"],
             ["tg_users.tg_id"],
-            name=op.f("fk_tg_users_tg_users__inviter_id"),
+            name=op.f("fk_tg_users__inviter_id"),
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("tg_id", name=op.f("pk_tg_users")),
@@ -66,7 +66,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["tg_user_id"],
             ["tg_users.tg_id"],
-            name=op.f("fk_tg_invite_codes_tg_users__tg_user_id"),
+            name=op.f("fk_tg_invite_codes__tg_user_id"),
         ),
         sa.PrimaryKeyConstraint("code", name=op.f("pk_tg_invite_codes")),
     )

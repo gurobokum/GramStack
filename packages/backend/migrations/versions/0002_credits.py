@@ -53,7 +53,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["tg_user_id"],
             ["tg_users.tg_id"],
-            name=op.f("fk_credits_purchases_tg_users__tg_user_id"),
+            name=op.f("fk_credits_purchases__tg_user_id"),
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_credits_purchases")),
@@ -93,12 +93,12 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.CheckConstraint(
             "amount > 0",
-            name=op.f("ck_credits_transactions__credits_transactions__amount_positive"),
+            name=op.f("ck_credits_transactions__amount_positive"),
         ),
         sa.ForeignKeyConstraint(
             ["tg_user_id"],
             ["tg_users.tg_id"],
-            name=op.f("fk_credits_transactions_tg_users__tg_user_id"),
+            name=op.f("fk_credits_transactions__tg_user_id"),
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_credits_transactions")),

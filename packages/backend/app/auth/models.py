@@ -10,9 +10,7 @@ from app.tgbot.schemas import UserTGData
 class TGUser(TimestampModel):
     __tablename__ = "tg_users"
     __table_args__ = (
-        CheckConstraint(
-            "credits_balance >= 0", name="tg_users__credits_balance_positive"
-        ),
+        CheckConstraint("credits_balance >= 0", name="credits_balance_positive"),
     )
 
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

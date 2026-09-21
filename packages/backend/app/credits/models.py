@@ -17,7 +17,7 @@ class CreditsTxStatus(str, enum.Enum):
 class CreditsTx(RecordModel):
     __tablename__ = "credits_transactions"
     __table_args__ = (
-        CheckConstraint("amount > 0", name="credits_transactions__amount_positive"),
+        CheckConstraint("amount > 0", name="amount_positive"),
         Index("ix_credits_transactions__deleted_at", "deleted_at"),
         Index(
             "ix_credits_transactions__hanging_transactions",
