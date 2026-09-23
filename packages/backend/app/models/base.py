@@ -189,14 +189,13 @@ class PydanticJSON(TypeDecorator[T]):
     def __init__(
         self, pydantic_model: T, none_as_null: bool = False, *args: Any, **kwargs: Any
     ) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, none_as_null=none_as_null, **kwargs)
         self.pydantic_model = pydantic_model
         self.type_adapter: TypeAdapter[T] = TypeAdapter(pydantic_model)
+        # part of the SQLAlchemy type cache key, which is built from __dict__
         self.none_as_null = none_as_null
 
     def process_bind_param(self, value: T | None, dialect: Dialect) -> Any:
-        if value is None and self.none_as_null:
-            return None
         return jsonable_encoder(value)
 
     def process_result_value(self, value: str | None, dialect: Dialect) -> T | None:
