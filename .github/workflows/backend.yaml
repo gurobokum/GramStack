@@ -62,10 +62,60 @@ jobs:
       - name: Run tests
         run: uv run task test
 
+  migrations:
+    name: migrations are in sync
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.2
+        env:
+          POSTGRES_DB: db_test
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5443:5432
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/backend/uv.lock
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # alembic imports the app, which validates Settings, and .env is
+      # gitignored; the committed test one already points at the service above
+      - name: Provide settings
+        run: cp .env.test .env
+
+      - name: Apply migrations
+        run: uv run task migrate
+
+      - name: Fail if a model change has no migration
+        run: |
+          uv run task makemigrations "ci drift check"
+          new=$(ls migrations/versions/*_ci_drift_check.py)
+          if ! grep -qE '^\s+pass$' "$new"; then
+            echo "Models and migrations disagree. Generated:"
+            cat "$new"
+            exit 1
+          fi
+          rm "$new"
+
   deploy:
     name: deploy 🚀
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, migrations]
     if: github.ref == 'refs/heads/main'
 
     steps:
